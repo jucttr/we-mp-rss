@@ -44,8 +44,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          # 如果你的轻量服务器只有 x86 架构（amd64），建议注释掉下一行多架构构建，能大幅提升构建速度
-          # platforms: linux/amd64,linux/arm64
+          # 构建多架构镜像（amd64 和 arm64）
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.TENCENT_REGISTRY }}/${{ secrets.TENCENT_NAMESPACE }}/${{ github.event.repository.name }}:${{ env.short_sha }}
