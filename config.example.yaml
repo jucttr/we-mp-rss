@@ -190,3 +190,24 @@ cascade:
   heartbeat_interval: ${CASCADE_HEARTBEAT_INTERVAL:-60}
   # 子节点任务拉取间隔（秒），默认30秒
   task_poll_interval: ${CASCADE_TASK_POLL_INTERVAL:-30}
+
+xueqiu:
+  enabled: ${XUEQIU_ENABLED:-True}
+  cookies: ${XUEQIU_COOKIES:-}
+  proxy:
+    enabled: ${XUEQIU_PROXY_ENABLED:-False}
+    http_url: ${XUEQIU_PROXY_URL:-}
+  browser:
+    headless: ${XUEQIU_BROWSER_HEADLESS:-True}
+    pool:
+      min: ${XUEQIU_BROWSER_POOL_MIN:-1}
+      max: ${XUEQIU_BROWSER_POOL_MAX:-5}
+      idleTimeout: ${XUEQIU_BROWSER_POOL_IDLE_TIMEOUT:-300000}
+      acquireTimeout: ${XUEQIU_BROWSER_POOL_ACQUIRE_TIMEOUT:-15000}
+  cookie:
+    refreshInterval: ${XUEQIU_COOKIE_REFRESH_INTERVAL:-1800000}
+    maxAge: ${XUEQIU_COOKIE_MAX_AGE:-3600000}
+  request:
+    timeout: ${XUEQIU_REQUEST_TIMEOUT:-15000}
+    batchDelay: ${XUEQIU_REQUEST_BATCH_DELAY:-1000}
+    maxRetries: ${XUEQIU_REQUEST_MAX_RETRIES:-2}

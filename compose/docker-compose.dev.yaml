@@ -49,6 +49,7 @@ services:
       - ../data_sync.py:/app/data_sync.py
       - ../job.py:/app/job.py
       - ../data:/app/data
+      - ../config.yaml:/app/config.yaml
     depends_on:
       redis:
         condition: service_healthy

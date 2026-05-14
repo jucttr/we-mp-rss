@@ -10,7 +10,7 @@ if cfg.get("redis.server.enabled", False):
         from tools.redis_server import run_redis_server
         run_redis_server(config_path="config.yaml")
 import uvicorn
-from core.print import print_warning, print_info, print_success
+from core.print import print_warning, print_info, print_success, print_error
 import threading
 from driver.auth import start_auth_service   
 import os
@@ -62,10 +62,24 @@ if __name__ == '__main__':
         from jobs.cascade_task_dispatcher import cascade_schedule_service
         cascade_schedule_service.start()
 
-    if  cfg.args.job =="True" and cfg.get("server.enable_job",False):
+    if cfg.args.job == "True" and cfg.get("server.enable_job", False):
         from jobs import start_job
-        threading.Thread(target=start_job,daemon=False).start()
+        threading.Thread(target=start_job, daemon=False).start()
         print_success("已开启定时任务")
+
+        if cfg.get("xueqiu.enabled", False) and cfg.get("xueqiu.browser.auto_start", True):
+            def _start_xq_browser():
+                import asyncio
+                from driver.xueqiu_browser import XueqiuBrowserManager
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    mgr = XueqiuBrowserManager()
+                    loop.run_until_complete(mgr.start())
+                    loop.run_forever()
+                except Exception as e:
+                    print_error(f"雪球浏览器启动失败: {e}")
+            threading.Thread(target=_start_xq_browser, daemon=True).start()
     else:
         print_warning("未开启定时任务")
     
