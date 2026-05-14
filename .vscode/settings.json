@@ -27,5 +27,6 @@
     "python.terminal.activateEnvironment": true,
     "python.analysis.autoImportCompletions": true,
     "python.analysis.typeCheckingMode": "basic",
-    "diffEditor.renderSideBySide": true
+    "diffEditor.renderSideBySide": true,
+    "editor.formatOnSave": true,
 }

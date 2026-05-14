@@ -28,3 +28,10 @@ test.yaml
 .travis
 test.py
 .codeartsdoer
+.env
+ 
+#  一些AI相关的文件夹和文件
+.claude
+.claude-plugin
+.trae
+.workbuddy/
