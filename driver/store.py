@@ -1,67 +1,93 @@
+import json
 from core.file import FileCrypto
 from core.config import cfg
 from core.redis_client import redis_client
-import json
+from core.print import print_warning
 
-class KeyStore:
-    key_file = "data/key.lic"
-    redis_key = "werss:key_store:cookies"
+
+class BaseCookieStore:
+    """Cookie 持久化存储基类
+
+    封装 Redis 优先 + 加密文件回退的双层存储模式。
+    子类只需定义 key_file、redis_key 和过滤逻辑即可。
+    """
+
+    key_file: str = ""
+    redis_key: str = ""
 
     def __init__(self):
         self.store = FileCrypto(cfg.get("safe.lic_key", "store.csol.store.werss"))
 
-    def save(self, text):
-        items = []
-        if type(text) != str:
-            for item in text:
-                # if item["domain"] == ".qq.com":
-                #     continue
-                items.append(item)
+    def save(self, cookies):
+        items = self._normalize_cookies(cookies)
         text = json.dumps(items)
 
-        # 优先保存到 Redis
         if redis_client.is_connected:
             try:
                 redis_client._client.set(self.redis_key, text)
-            except Exception:
-                pass
+            except Exception as e:
+                print_warning(f"Cookie保存到Redis失败: {e}")
 
-        # 同时保存到本地文件作为备份
-        self.store.encrypt_to_file(self.key_file, text.encode("utf-8"))
+        try:
+            self.store.encrypt_to_file(self.key_file, text.encode("utf-8"))
+        except Exception as e:
+            print_warning(f"Cookie保存到文件失败: {e}")
 
     def load(self):
-        # 优先从 Redis 加载
         if redis_client.is_connected:
             try:
                 data = redis_client._client.get(self.redis_key)
                 if data:
                     items = json.loads(data)
-                    new_items = self._filter_items(items)
-                    return new_items
-            except Exception:
-                pass
+                    if isinstance(items, list) and len(items) > 0:
+                        return self._filter_items(items)
+            except Exception as e:
+                print_warning(f"Cookie从Redis加载失败: {e}")
 
-        # Redis 不可用时从文件加载
         try:
             text = self.store.decrypt_from_file(self.key_file).decode("utf-8")
             items = json.loads(text)
-            new_items = self._filter_items(items)
-            return new_items
-        except:
-            return ""
+            if isinstance(items, list) and len(items) > 0:
+                return self._filter_items(items)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            print_warning(f"Cookie从文件加载失败: {e}")
+
+        return []
+
+    def clear(self):
+        if redis_client.is_connected:
+            try:
+                redis_client._client.delete(self.redis_key)
+            except Exception:
+                pass
+        try:
+            import os
+            if os.path.exists(self.key_file):
+                os.remove(self.key_file)
+        except Exception:
+            pass
+
+    def _normalize_cookies(self, cookies):
+        items = []
+        if isinstance(cookies, str):
+            for item in cookies.split(";"):
+                item = item.strip()
+                if "=" in item:
+                    name, value = item.split("=", 1)
+                    items.append({
+                        "name": name.strip(),
+                        "value": value.strip(),
+                        "domain": self._default_domain(),
+                        "path": "/",
+                    })
+        elif isinstance(cookies, list):
+            items = cookies
+        return items
 
     def _filter_items(self, items):
-        """过滤 cookie items"""
-        new_items = []
-        for item in items:
-            # if "domain" in item:
-                # del item["domain"]
-            if item['name'] == "_clck":
-                continue
-            if item['name'] == "token":
-                continue
-            new_items.append(item)
-        return new_items
+        return items
 
-
-Store = KeyStore()
+    def _default_domain(self) -> str:
+        return ""

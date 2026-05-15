@@ -11,7 +11,7 @@ from driver.success import Success
 import time
 import os
 from driver.success import getStatus
-from driver.store import Store
+from driver.wx_store import Store
 import re
 from threading import Timer, Lock
 from .cookies import expire

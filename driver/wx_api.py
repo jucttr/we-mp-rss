@@ -660,7 +660,7 @@ class WeChatAPI:
                             'wx_login_url': self.qr_code_path,
                             'expiry': expire(self.cookies_dict if self.cookies_dict else cookies_list)
             }
-            from driver.store import Store
+            from driver.wx_store import Store
             Store.save(cookies_list)
             set_token(login_data,account_info)
             if self.login_callback:
