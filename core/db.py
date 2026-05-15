@@ -4,7 +4,7 @@ from sqlalchemy import Column, Integer, String, DateTime
 from typing import Optional, List
 from .models import Feed, Article
 from .config import cfg
-from core.models.base import Base  
+from core.models.base import Base, DATA_STATUS  
 from core.print import print_warning,print_info,print_error,print_success
 # 声明基类
 # Base = declarative_base()
@@ -73,6 +73,7 @@ class Db:
             
             self.session_factory=self.get_session_factory()
             self.ensure_article_columns()
+            self.ensure_feed_columns()
         except Exception as e:
             print(f"Error creating database connection: {e}")
             raise
@@ -101,6 +102,25 @@ class Db:
             print_info(f"[{self.tag}] 文章表结构已自动更新: {', '.join(alter_statements)}")
         except Exception as e:
             print_warning(f"[{self.tag}] 检查/更新 articles 表结构失败: {e}")
+    def ensure_feed_columns(self):
+        try:
+            inspector = inspect(self.engine)
+            if "feeds" not in inspector.get_table_names():
+                return
+            columns = {column["name"] for column in inspector.get_columns("feeds")}
+            alter_statements = []
+            if "source_type" not in columns:
+                alter_statements.append("ALTER TABLE feeds ADD COLUMN source_type VARCHAR(32) DEFAULT 'wechat'")
+            if "extinfo" not in columns:
+                alter_statements.append("ALTER TABLE feeds ADD COLUMN extinfo TEXT")
+            if not alter_statements:
+                return
+            with self.engine.begin() as conn:
+                for stmt in alter_statements:
+                    conn.execute(text(stmt))
+            print_info(f"[{self.tag}] 订阅源表结构已自动更新: {', '.join(alter_statements)}")
+        except Exception as e:
+            print_warning(f"[{self.tag}] 检查/更新 feeds 表结构失败: {e}")
     def create_tables(self):
         """Create all tables defined in models"""
         from core.models.base import Base as B # 导入所有模型
@@ -153,7 +173,7 @@ class Db:
                 if existing_article is not None:
                     # 当更新时间和状态都相同时，不需要更新
                     if art.status == existing_article.status and existing_article.publish_time==art.publish_time \
-                    and art.status!=Article.STATUS_DELETED \
+                    and art.status!=DATA_STATUS.DELETED \
                     and art.title==existing_article.title: # type: ignore
                         return False
                     if art.content_html:# type: ignore
@@ -209,10 +229,13 @@ class Db:
             print(f"Failed to fetch Feed: {e}")
             return e # type: ignore   
              
-    def get_all_mps(self) -> List[Feed]:
-        """Get all Feed records"""
+    def get_all_mps(self, source_type: str = None) -> List[Feed]:
+        """Get all Feed records, optionally filtered by source_type"""
         try:
-            return self.get_session().query(Feed).all()
+            query = self.get_session().query(Feed)
+            if source_type:
+                query = query.filter(Feed.source_type == source_type)
+            return query.all()
         except Exception as e:
             print(f"Failed to fetch Feed: {e}")
             return e # type: ignore

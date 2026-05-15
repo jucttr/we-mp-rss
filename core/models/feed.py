@@ -1,4 +1,4 @@
-from  .base import Base,Column,String,Integer,DateTime
+from  .base import Base,Column,String,Integer,DateTime,Text
 
 FEATURED_MP_ID = "MP_WXS_FEATURED_ARTICLES"
 FEATURED_MP_NAME = "精选文章"
@@ -17,3 +17,5 @@ class Feed(Base):
     created_at = Column(DateTime) 
     updated_at = Column(DateTime)
     faker_id = Column(String(255))
+    source_type = Column(String(32), default='wechat', index=True)
+    extinfo = Column(Text)

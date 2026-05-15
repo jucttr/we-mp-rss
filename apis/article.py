@@ -487,19 +487,22 @@ async def get_articles(
         # 打印生成的 SQL 语句（包含分页参数）
         print_warning(query.statement.compile(compile_kwargs={"literal_binds": True}))
                        
-        # 查询公众号名称
+        # 查询公众号名称和来源类型
         from core.models.feed import Feed
         mp_names = {}
+        mp_source_types = {}
         for article in results:
             if article.mp_id and article.mp_id not in mp_names:
                 feed = session.query(Feed).filter(Feed.id == article.mp_id).first()
                 mp_names[article.mp_id] = feed.mp_name if feed else "未知公众号"
+                mp_source_types[article.mp_id] = feed.source_type if feed else "wechat"
 
-        # 合并公众号名称到文章列表
+        # 合并公众号名称和来源类型到文章列表
         article_list = []
         for article in results:
             article_dict = article.__dict__.copy()
             article_dict["mp_name"] = mp_names.get(article.mp_id, "未知公众号")
+            article_dict["source_type"] = mp_source_types.get(article.mp_id, "wechat")
             article_dict["is_favorite"] = int(getattr(article, "is_favorite", 0) or 0)
             article_dict["has_content"] = int(getattr(article, "has_content", 0) or 0)
             article_list.append(article_dict)
