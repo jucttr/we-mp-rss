@@ -14,7 +14,7 @@
                 <icon-down />
               </a-button>
               <template #content>
-                <a-doption @click="showAddModal"><template #icon><icon-plus /></template>添加公众号</a-doption>
+                <a-doption @click="showAddModal"><template #icon><icon-plus /></template>添加公众号/雪球号</a-doption>
                 <a-doption @click="showAddFeaturedArticleModal"><template #icon><icon-link /></template>添加精选文章</a-doption>
                 <a-doption @click="exportMPS"><template #icon><icon-export /></template>导出公众号</a-doption>
                 <a-doption @click="importMPS"><template #icon><icon-import /></template>导入公众号</a-doption>
@@ -469,6 +469,7 @@ const publishTypeColorMap: Record<number, string> = {
 const allColumnOptions = [
   { key: 'pic_url', label: '题图', required: false },
   { key: 'title', label: '文章标题', required: true },
+  { key: 'source_type', label: '来源', required: false },
   { key: 'mp_id', label: '公众号', required: false },
   { key: 'has_content', label: '正文', required: false },
   { key: 'copyright_stat', label: '原创', required: false },
@@ -479,7 +480,7 @@ const allColumnOptions = [
 ]
 
 // 默认显示的列
-const defaultVisibleColumns = ['pic_url', 'title', 'mp_id', 'created_at', 'publish_time', 'actions']
+const defaultVisibleColumns = ['pic_url', 'title', 'source_type', 'mp_id', 'created_at', 'publish_time', 'actions']
 
 // 从 localStorage 读取列配置
 const getStoredColumns = (): string[] => {
@@ -631,7 +632,20 @@ const columns = computed(() => {
       }
     },
     {
-      title: '公众号',
+      title: '来源',
+      dataIndex: 'source_type',
+      width: 100,
+      align: 'center',
+      render: ({ record }) => {
+        const isXueqiu = record.source_type === 'xueqiu'
+        return h('a-tag', {
+          color: isXueqiu ? 'orangered' : 'green',
+          size: 'small'
+        }, isXueqiu ? '雪球' : '公众号')
+      }
+    },
+    {
+      title: 'up主名称',
       dataIndex: 'mp_id',
       width: 90,
       ellipsis: true,
