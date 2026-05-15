@@ -13,6 +13,7 @@ from core.rss import RSS
 from driver.success import setStatus,CanGetToken
 from driver.wxarticle import Web
 from core.wait import Wait
+from core.gather.base import BaseGather
 import random
 # 定义一些常见的 User-Agent
 USER_AGENTS = [
@@ -38,21 +39,16 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1"
 ]
 # 定义基类
-class WxGather:
-    articles=[]
-    aids=[]
-    def all_count(self):
-        if getattr(self, 'articles', None) is not None:
-            return len(self.articles)
-        return 0
-    def RecordAid(self,aid:str):
-        self.aids.append(aid)
-        pass
-    def HasGathered(self,aid:str):
-        if aid in self.aids:
-            return True
-        self.RecordAid(aid)
-        return False
+class WxGather(BaseGather):
+    def __init__(self,is_add:bool=False):
+        super().__init__(is_add=is_add)
+        self._cookies={}
+        self.start_time = None  # 记录开始时间
+        session=  requests.Session()
+        timeout = (5, 10)
+        session.timeout = timeout # type: ignore
+        self.session=session
+        self.get_token()
     def Model(self,type=None):
         type=type or cfg.get("gather.model","web")
         print(f"采集模式:{type}")
@@ -66,16 +62,6 @@ class WxGather:
             from core.wx.model.api import MpsApi
             wx=MpsApi()
         return wx
-    def __init__(self,is_add:bool=False):
-        self.articles=[]
-        self.is_add=is_add
-        self._cookies={}
-        self.start_time = None  # 记录开始时间
-        session=  requests.Session()
-        timeout = (5, 10)  
-        session.timeout = timeout # type: ignore
-        self.session=session
-        self.get_token()
     def get_token(self):
         cfg.reload()
         from driver.token import get as get_token_val
@@ -94,7 +80,7 @@ class WxGather:
         self.proxy_enabled = cfg.get('proxy.enabled', False)
         self.deno_proxy_url = cfg.get('proxy.deno_url', '')
         self.http_proxy_url = cfg.get('proxy.http_url', '')
-        
+
     def _get_proxies(self):
         """获取代理配置"""
         if not self.proxy_enabled:
@@ -105,18 +91,18 @@ class WxGather:
                 "https": self.http_proxy_url
             }
         return None
-    
+
     def _proxy_request(self, url: str) -> str:
         """通过代理请求URL内容
-        
+
         Args:
             url: 目标URL
-            
+
         Returns:
             响应内容
         """
         import urllib.parse
-        
+
         # 如果启用了Deno Deploy代理
         if self.proxy_enabled and self.deno_proxy_url:
             proxy_url = f"{self.deno_proxy_url}?url={urllib.parse.quote(url, safe='')}"
@@ -129,7 +115,7 @@ class WxGather:
                     print_warning(f"Deno代理请求失败: {response.status_code}")
             except Exception as e:
                 print_error(f"Deno代理请求异常: {e}")
-        
+
         # 使用HTTP代理或直连
         proxies = self._get_proxies()
         try:
@@ -138,7 +124,7 @@ class WxGather:
                 return response.text
         except Exception as e:
             print_error(f"请求失败: {e}")
-        
+
         return ""
     def fix_header(self,url):
          user_agent = random.choice(USER_AGENTS)
@@ -159,14 +145,14 @@ class WxGather:
             session=self.session
             # 更新请求头
             headers = self.fix_header(url)
-            
+
             # 优先使用代理
             if self.proxy_enabled and self.deno_proxy_url:
                 text = self._proxy_request(url)
                 if text:
                     text = self.remove_common_html_elements(text)
                     return text
-            
+
             # 使用HTTP代理或直连
             proxies = self._get_proxies()
             r = session.get(url, headers=headers, proxies=proxies)
@@ -255,7 +241,7 @@ class WxGather:
             params=params,
             headers=headers,
             proxies=proxies,    #type : ignore
-            ) 
+            )
             response.raise_for_status()  # 检查状态码是否为200
             data = response.text  # 解析JSON数据
             msg = json.loads(data)  # 手动解析
@@ -264,19 +250,20 @@ class WxGather:
                 return
             if msg['base_resp']['ret'] != 0:
                 self.Error("错误原因:{}:代码:{}".format(msg['base_resp']['err_msg'],msg['base_resp']['ret']),code="Invalid Session")
-                return 
+                return
             if 'publish_page' in msg:
                 msg['publish_page']=json.loads(msg['publish_page'])
         except Exception as e:
             print_error(f"请求失败: {e}")
             raise e
         return msg
-    
-    
-    
+
+
+
     def Start(self,mp_id=None):
         try:
             self.articles=[]
+            self.aids=[]
             self.get_token()
             if self.token=="" or self.token is None:
                 self.Error("请先扫码登录公众号平台")
@@ -319,7 +306,7 @@ class WxGather:
         execution_time = 0
         if self.start_time is not None:
             execution_time = end_time - self.start_time
-        
+
         if getattr(self, 'articles', None) is not None:
             print(f"成功{len(self.articles)}条")
             rss=RSS()
@@ -328,8 +315,8 @@ class WxGather:
                 mp_id=self.articles[0]['mp_id']
             except:
                 pass
-            rss.clear_cache(mp_id=mp_id)  
-        
+            rss.clear_cache(mp_id=mp_id)
+
         # 输出执行时间统计
         if execution_time > 0:
             if execution_time < 60:
@@ -343,7 +330,7 @@ class WxGather:
                 minutes = int((execution_time % 3600) // 60)
                 seconds = execution_time % 60
                 print(f"执行耗时: {hours}小时{minutes}分{seconds:.2f}秒")
-        
+
         if CallBack is not None:
             CallBack(self.articles)
 
@@ -351,7 +338,7 @@ class WxGather:
         from datetime import datetime, timezone
         # UTC时间对象
         utc_dt = datetime.fromtimestamp(int(timestamp), timezone.utc)
-        t=(utc_dt.strftime("%Y-%m-%d %H:%M:%S")) 
+        t=(utc_dt.strftime("%Y-%m-%d %H:%M:%S"))
 
         # UTC转本地时区
         local_dt = utc_dt.astimezone()
@@ -377,7 +364,7 @@ class WxGather:
         from datetime import datetime
         import time
         try:
-            
+
             # 更新同步时间为当前时间
             current_time = int(time.time())
             update_data = {
@@ -385,7 +372,7 @@ class WxGather:
                 # 'updated_at': dateformat(current_time)
                 'updated_at': datetime.now(),
             }
-            
+
             # 如果有新文章时间，也更新update_time
             if hasattr(mp, 'update_time') and mp.update_time:
                 update_data['update_time'] = mp.update_time
@@ -405,7 +392,7 @@ class WxGather:
                     print_error(f"未找到ID为{mp_id}的公众号记录")
             finally:
                 pass
-                
+
         except Exception as e:
             print_error(f"更新公众号状态失败: {e}")
             raise NotImplementedError(f"更新公众号状态失败:{str(e)}")
