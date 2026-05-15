@@ -131,6 +131,10 @@ class PlaywrightController:
                 "headless": self.headless,
             }
 
+            # 显式传递 DISPLAY 环境变量（用于 Xvfb）
+            display_env = os.environ.get("DISPLAY", ":99")
+            launch_options["env"] = {"DISPLAY": display_env}
+
             # 只为 Chromium 添加特定参数
             if self.browser_type == "chromium":
                 launch_options["args"] = [

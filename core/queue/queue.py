@@ -139,18 +139,20 @@ class TaskRecord:
 class TaskQueueManager:
     """任务队列管理器，用于管理和执行排队任务（支持多进程）"""
     
-    def __init__(self, maxsize=0, tag="", redis_prefix=None):
+    def __init__(self, maxsize=0, tag="", redis_prefix=None, task_timeout=300):
         """初始化任务队列
         
         Args:
             maxsize: 队列最大大小
             tag: 队列标签
             redis_prefix: Redis 键前缀配置，包含 pending, current, history, status
+            task_timeout: 单个任务最大执行时长（秒），超时后强制标记失败继续下一个，0 表示不限
         """
         self._queue = queue.Queue(maxsize=maxsize)
         self._thread_lock = threading.Lock()
         self._is_running = False
         self.tag = tag
+        self.task_timeout = task_timeout
         # 任务历史记录（最近100条）
         self._history: list[TaskRecord] = []
         self._history_max_size = 100
@@ -450,13 +452,57 @@ class TaskQueueManager:
                         try:
                             # 记录任务开始时间
                             start_time = time.time()
-                            task(*args, **kwargs)
+                            
+                            # 带超时保护的任务执行
+                            timed_out = False
+                            task_error = None
+                            
+                            def _run_task_with_result():
+                                """在子线程中执行任务，通过共享变量传递结果"""
+                                nonlocal task_error
+                                try:
+                                    task(*args, **kwargs)
+                                except Exception as e:
+                                    task_error = e
+                            
+                            if self.task_timeout and self.task_timeout > 0:
+                                # 有超时限制：在子线程中执行，主线程等待
+                                task_thread = threading.Thread(target=_run_task_with_result, daemon=True)
+                                task_thread.start()
+                                task_thread.join(timeout=self.task_timeout)
+                                
+                                if task_thread.is_alive():
+                                    # 任务超时，线程仍在运行（daemon 线程会在主线程退出时自动清理）
+                                    timed_out = True
+                                    duration = time.time() - start_time
+                                    print_error(f"任务 [{task_name}] 执行超时({self.task_timeout}s)，强制标记失败")
+                                    
+                                    with self._thread_lock:
+                                        if self._current_task:
+                                            self._current_task.end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                            self._current_task.duration = duration
+                                            self._current_task.status = "failed"
+                                            self._current_task.error = f"任务执行超时({self.task_timeout}s)"
+                                    
+                                    # 超时直接跳出重试循环，不再重试
+                                    break
+                                else:
+                                    # 线程正常结束，检查是否有异常
+                                    if task_error is not None:
+                                        raise task_error
+                                    duration = time.time() - start_time
+                            else:
+                                # 无超时限制：直接在当前线程执行（兼容旧行为）
+                                task(*args, **kwargs)
+                                duration = time.time() - start_time
+                            
                             # 记录任务执行时间
-                            duration = time.time() - start_time
+                            if not timed_out:
+                                duration = time.time() - start_time
                             
                             # 更新当前任务记录
                             with self._thread_lock:
-                                if self._current_task:
+                                if self._current_task and self._current_task.status == "running":
                                     self._current_task.end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                     self._current_task.duration = duration
                                     self._current_task.status = "completed"
@@ -534,7 +580,8 @@ class TaskQueueManager:
         with self._thread_lock:
             return {
                 'is_running': self._is_running,
-                'pending_tasks': self._queue.qsize()
+                'pending_tasks': self._queue.qsize(),
+                'task_timeout': self.task_timeout
             }
     
     def get_detailed_status(self) -> dict:
@@ -621,14 +668,16 @@ class TaskQueueManager:
             print_success("队列已删除")
 
 # 创建全局单例（模块级变量，确保唯一实例）
-TaskQueue = TaskQueueManager(tag="文章采集")
+# 主队列：文章采集，单任务超时 5 分钟（雪球浏览器回退可能较慢）
+TaskQueue = TaskQueueManager(tag="文章采集", task_timeout=300)
 _task_queue_instance = TaskQueue  # 设置全局实例引用
 print_info(f"TaskQueue singleton created, instance id: {TaskQueue._instance_id}")
 TaskQueue.run_task_background()
 
-# 内容补抓队列
+# 内容补抓队列：超时 3 分钟
 ContentTaskQueue = TaskQueueManager(
     tag="内容补抓",
+    task_timeout=180,
     redis_prefix={
         'pending': CONTENT_REDIS_KEY_PENDING,
         'current': CONTENT_REDIS_KEY_CURRENT,
