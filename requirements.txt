@@ -70,3 +70,4 @@ docx2pdf==0.1.8
 markitdown==0.1.5
 pymupdf==1.27.2.2
 pdf2docx==0.5.12
+PyGithub==2.6.1

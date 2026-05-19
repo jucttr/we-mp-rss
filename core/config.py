@@ -3,6 +3,11 @@ import sys
 import os
 import argparse
 from string import Template
+
+# 加载 .env 文件中的环境变量（如果存在），便于本地开发时无需手动 export
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"), override=True)
+
 from core.print import print_warning, print_error,print_info
 from .file import FileCrypto
 class Config: 

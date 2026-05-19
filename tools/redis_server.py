@@ -1283,7 +1283,7 @@ db0:keys={len(self.store.data)},expires={len(self.store.expires)}
         try:
             self.server_socket.bind((self.host, self.port))
         except OSError as e:
-            if e.errno == 98:  # Address already in use
+            if e.errno == 98 or e.errno == 48:  # Address already in use (Linux: 98, macOS: 48)
                 print(f"[WARN] 端口 {self.port} 已被占用，内置 Redis 服务启动失败")
                 print(f"[INFO] 可能原因: 1) 另一个 Redis 实例正在运行  2) 之前的服务未正确关闭")
                 print(f"[INFO] 解决方案: 设置 REDIS_SERVER_ENABLED=False 禁用内置 Redis，或更换端口 REDIS_SERVER_PORT")

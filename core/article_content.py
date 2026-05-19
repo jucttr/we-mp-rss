@@ -14,6 +14,28 @@ def normalize_content_mode(mode: str | None = None) -> str:
     return normalized
 
 
+def _try_obsidian_sync(session, article: Any) -> None:
+    if not cfg.get("obsidian.enabled", False):
+        return
+    try:
+        from tools.mdtools.github_sync import sync_article_to_obsidian_async
+
+        mp_id = getattr(article, "mp_id", "") or ""
+        mp_name = ""
+        if mp_id:
+            try:
+                from core.models.feed import Feed
+                feed = session.query(Feed).filter(Feed.id == mp_id).first()
+                if feed:
+                    mp_name = getattr(feed, "mp_name", "") or ""
+            except Exception:
+                pass
+
+        sync_article_to_obsidian_async(article, mp_name=mp_name)
+    except Exception as exc:
+        print_warning(f"obsidian sync trigger failed: {exc}")
+
+
 def extract_origin_article_id(article_id: str, mp_id: str | None = None) -> str:
     if not article_id:
         return ""
@@ -129,6 +151,9 @@ def sync_article_content(
         session.commit()
         session.refresh(article)
         print_info(f"article {article.id} content synced via {mode}")
+
+        _try_obsidian_sync(session, article)
+
         return True, mode
     except Exception:
         # 修正失败,增加失败计数

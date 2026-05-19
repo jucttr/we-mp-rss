@@ -62,7 +62,15 @@ class Db:
             def receive_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
                 print_info(f"[SQL] {statement}")
                 if parameters:
-                    print_info(f"[参数] {parameters}")
+                    def _truncate_param(p, max_len=200):
+                        if isinstance(p, str) and len(p) > max_len:
+                            return p[:max_len] + f"...({len(p)} chars)"
+                        return p
+                    if isinstance(parameters, (list, tuple)):
+                        truncated = tuple(_truncate_param(p) for p in parameters)
+                    else:
+                        truncated = _truncate_param(parameters)
+                    print_info(f"[参数] {truncated}")
             
             # 为 SQLite 设置 text_factory 处理无效 UTF-8 字符
             if con_str.startswith('sqlite:///'):

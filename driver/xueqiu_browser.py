@@ -430,7 +430,6 @@ class XueqiuBrowserManager:
         4. 如果被 WAF 拦截，等待挑战完成后重新导航
         """
         is_json_api = ".json" in url.split("?")[0]
-        print_info(f"雪球浏览器请求: {url} (owner={owner}, is_json_api={is_json_api})")
 
         context, page = None, None
         try:

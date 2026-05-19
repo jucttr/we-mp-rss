@@ -25,17 +25,23 @@ jobs:
         
       - name: Log in to GHCR
         run: echo  ${{secrets.TOKEN}} | docker login ghcr.io -u  ${{github.actor}} --password-stdin
-        
-     
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
       - name: Build and Push Multi-platform Docker Image
         run: |
           echo 构建多架构镜像: ${{github.repository}}
           echo 创建并使用buildx构建器（支持多架构）
-          docker buildx create --name multiarch --use 2>nul || docker buildx use multiarch
+          docker buildx create --name multiarch --use 2>/dev/null || docker buildx use multiarch
           echo 构建多架构镜像
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --tag ghcr.io/${{github.repository}}:latest \
+            --tag docker.io/${{ secrets.DOCKER_HUB_USERNAME }}/we-mp-rss:latest \
             --label "org.opencontainers.image.source=https://github.com/${{github.repository}}" \
             --label "org.opencontainers.image.description=WeRss 微信公众号RSS订阅服务" \
             --label "org.opencontainers.image.licenses=MIT" \

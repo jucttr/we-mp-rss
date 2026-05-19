@@ -149,7 +149,7 @@ proxy:
 #安全配置
 safe:
     # 需要隐藏的配置信息，用逗号分隔 如：db,secret,token等 
-    hide_config: "${SAFE_HIDE_CONFIG:-db,secret,token,notice.wechat,notice.feishu,notice.dingding}"
+    hide_config: "${SAFE_HIDE_CONFIG:-db,secret,token,notice.wechat,notice.feishu,notice.dingding,obsidian.github.token}"
     # 授权加密KEY
     lic_key: "${SAFE_LIC_KEY:-RACHELOS}"
 # 微信账号配置
@@ -211,3 +211,14 @@ xueqiu:
     timeout: ${XUEQIU_REQUEST_TIMEOUT:-15000}
     batchDelay: ${XUEQIU_REQUEST_BATCH_DELAY:-1000}
     maxRetries: ${XUEQIU_REQUEST_MAX_RETRIES:-2}
+
+obsidian:
+  #是否启用Obsidian同步 默认False
+  enabled: ${OBSIDIAN_ENABLED:-False}
+  github:
+    #GitHub Personal Access Token (需要repo权限)
+    token: ${OBSIDIAN_GITHUB_TOKEN:-}
+    #GitHub仓库路径 格式: owner/repo 例如: username/my-obsidian-vault
+    repo: ${OBSIDIAN_GITHUB_REPO:-}
+    #GitHub API Base URL (GitHub Enterprise使用，留空则使用github.com)
+    base_url: ${OBSIDIAN_GITHUB_BASE_URL:-}

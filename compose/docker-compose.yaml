@@ -42,7 +42,7 @@ services:
       - ./singbox/run-singbox.sh:/etc/sing-box/run-singbox.sh:ro
 
   we-mp-rss:
-    image: ghcr.io/rachelos/we-mp-rss:latest
+    image: docker.io/jucttr/we-mp-rss:latest   # 改成 Docker Hub 地址
     container_name: we-mp-rss
     restart: unless-stopped
     env_file:
