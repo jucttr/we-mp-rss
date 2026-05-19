@@ -1,1 +1,0 @@
-import{f as e}from"./http-DVSCpkxb.js";export{e as getArticles};
