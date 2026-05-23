@@ -1,0 +1,1 @@
+import{v as e}from"./http-BlQOs-6T.js";export{e as getArticles};
