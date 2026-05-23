@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import threading
 import time
 from typing import Any, Optional
@@ -91,13 +92,15 @@ def push_to_github(
     content: str,
     message: str = "",
 ) -> bool:
-    """将内容推送到 GitHub 仓库
+    """将内容推送到 GitHub 仓库（幂等：内容未变时跳过）
 
-    采用"直接创建，兼容已存在"的策略：
-    1. 尝试 create_file 创建新文件
-    2. 如果文件已存在（422 错误），自动获取 SHA 后 update_file 更新
-    3. 对 403/401/409 等异常分别处理，避免阻塞后续推送
-    4. 通过信号量和路径锁控制并发，防止连接池耗尽和冲突
+    采用"先检查再推送"的策略，避免不必要的 API 调用和空 commit：
+    1. get_contents 检查文件是否已存在
+    2. 存在且内容相同 → 跳过（无变更）
+    3. 存在且内容不同 → update_file 更新
+    4. 不存在（404）→ create_file 创建
+    5. 对 403/401/409 等异常分别处理，避免阻塞后续推送
+    6. 通过信号量和路径锁控制并发，防止连接池耗尽和冲突
 
     Args:
         path: 仓库内的文件路径，如 "极客公园/2026-05/标题.md"
@@ -105,13 +108,15 @@ def push_to_github(
         message: Git commit message，为空时自动生成
 
     Returns:
-        推送是否成功
+        推送是否成功（内容未变跳过也算成功）
     """
     if not content or not path:
         return False
 
     if not message:
         message = f"feat: add {path}"
+
+    new_bytes = content.encode("utf-8")
 
     # 获取路径级排他锁，防止同一文件并发更新导致 409 冲突
     path_lock = _get_path_lock(path)
@@ -134,64 +139,82 @@ def push_to_github(
             return False
 
         try:
-            repo.create_file(
-                path=path,
-                message=message,
-                content=content.encode("utf-8"),
-            )
-            print_success(f"[obsidian] => pushed {path} to github")
-            return True
-        except Exception as exc:
-            error_str = str(exc)
-            status = getattr(exc, "status", None)
+            # Step 1: 检查文件是否已存在
+            try:
+                existing = repo.get_contents(path)
+            except Exception as exc:
+                error_str = str(exc)
+                status = getattr(exc, "status", None)
 
-            # 文件已存在（422），尝试更新
-            if status == 422 or "422" in error_str:
-                try:
-                    existing = repo.get_contents(path)
-                    repo.update_file(
-                        path=path,
-                        message=f"update: {message}",
-                        content=content.encode("utf-8"),
-                        sha=existing.sha,
-                    )
-                    print_info(f"[obsidian] => updated {path} on github")
-                    return True
-                except Exception as update_exc:
-                    # 处理 409 冲突：获取最新 SHA 后重试一次
-                    update_error = str(update_exc)
-                    update_status = getattr(update_exc, "status", None)
-                    if update_status == 409 or "409" in update_error:
-                        try:
-                            time.sleep(0.5)
-                            existing = repo.get_contents(path)
-                            repo.update_file(
-                                path=path,
-                                message=f"update: {message}",
-                                content=content.encode("utf-8"),
-                                sha=existing.sha,
-                            )
-                            print_info(f"[obsidian] => updated {path} on github (retry after 409)")
-                            return True
-                        except Exception as retry_exc:
-                            print_warning(f"[obsidian] => update retry failed: {retry_exc}")
-                            return False
-                    print_warning(f"[obsidian] => update existing file failed: {update_exc}")
+                # 文件不存在（404），创建新文件
+                if status == 404 or "404" in error_str:
+                    try:
+                        repo.create_file(
+                            path=path,
+                            message=message,
+                            content=new_bytes,
+                        )
+                        print_success(f"[obsidian] => pushed {path} to github")
+                        return True
+                    except Exception as create_exc:
+                        print_error(f"[obsidian] => create file failed: {create_exc}")
+                        return False
+
+                # 速率限制（403）
+                if status == 403 or "rate limit" in error_str.lower():
+                    print_warning(f"[obsidian] => github rate limit exceeded, skipping: {path}")
                     return False
 
-            # 速率限制（403）
-            if status == 403 or "rate limit" in error_str.lower():
-                print_warning(f"[obsidian] => github rate limit exceeded, skipping: {path}")
+                # 认证失败（401），重置客户端以便下次重试
+                if status == 401 or "Bad credentials" in error_str:
+                    print_warning("[obsidian] => github auth failed, resetting client")
+                    _reset_client()
+                    return False
+
+                print_error(f"[obsidian] => get_contents failed: {exc}")
                 return False
 
-            # 认证失败（401），重置客户端以便下次重试
-            if status == 401 or "Bad credentials" in error_str:
-                print_warning("[obsidian] => github auth failed, resetting client")
-                _reset_client()
-                return False
+            # Step 2: 文件已存在，比对内容
+            existing_bytes = base64.b64decode(existing.content)
+            if existing_bytes == new_bytes:
+                print_info(f"[obsidian] => {path} unchanged, skipped")
+                return True
 
-            print_error(f"[obsidian] => push to github failed: {exc}")
-            return False
+            # Step 3: 内容有变化，更新文件
+            try:
+                repo.update_file(
+                    path=path,
+                    message=f"update: {message}",
+                    content=new_bytes,
+                    sha=existing.sha,
+                )
+                print_info(f"[obsidian] => updated {path} on github")
+                return True
+            except Exception as update_exc:
+                # 处理 409 冲突：获取最新 SHA 后重试一次
+                update_error = str(update_exc)
+                update_status = getattr(update_exc, "status", None)
+                if update_status == 409 or "409" in update_error:
+                    try:
+                        time.sleep(0.5)
+                        existing_retry = repo.get_contents(path)
+                        existing_retry_bytes = base64.b64decode(existing_retry.content)
+                        if existing_retry_bytes == new_bytes:
+                            print_info(f"[obsidian] => {path} unchanged after 409, skipped")
+                            return True
+                        repo.update_file(
+                            path=path,
+                            message=f"update: {message}",
+                            content=new_bytes,
+                            sha=existing_retry.sha,
+                        )
+                        print_info(f"[obsidian] => updated {path} on github (retry after 409)")
+                        return True
+                    except Exception as retry_exc:
+                        print_warning(f"[obsidian] => update retry failed: {retry_exc}")
+                        return False
+                print_warning(f"[obsidian] => update existing file failed: {update_exc}")
+                return False
         finally:
             _push_semaphore.release()
     finally:
