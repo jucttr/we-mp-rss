@@ -42,9 +42,11 @@ services:
       - ./singbox/run-singbox.sh:/etc/sing-box/run-singbox.sh:ro
 
   we-mp-rss:
-    image: docker.io/jucttr/we-mp-rss:latest   # 改成 Docker Hub 地址
+    image: docker.io/jucttr/we-mp-rss:latest
     container_name: we-mp-rss
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     env_file:
       - ../.env
     environment:
@@ -59,6 +61,18 @@ services:
       - mysql
       - redis
       - singbox
+
+  watchtower:
+    image: docker.1ms.run/containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: "60"
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_TIMEOUT: "30s"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   db_data:
