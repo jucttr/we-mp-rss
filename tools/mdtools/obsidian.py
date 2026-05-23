@@ -56,6 +56,7 @@ def _build_frontmatter(
     publish_time: Any = None,
     tags: Optional[list[str]] = None,
     cover: str = "",
+    tag_intro: str = "",
 ) -> str:
     """构建 Obsidian YAML frontmatter
 
@@ -70,6 +71,7 @@ def _build_frontmatter(
         publish_time: 发布时间（Unix 时间戳）
         tags: 额外标签列表
         cover: 封面图片 URL
+        tag_intro: 标签简介，用于描述文章所属分类
 
     Returns:
         YAML frontmatter 字符串，包含 --- 包围的元数据块
@@ -90,6 +92,10 @@ def _build_frontmatter(
             tag_clean = tag.replace('"', "").strip()
             if tag_clean:
                 lines.append(f"  - {tag_clean}")
+
+    if tag_intro:
+        intro_clean = tag_intro.replace('"', '\\"').replace("\n", " ").strip()
+        lines.append(f'tag_intro: "{intro_clean}"')
 
     if mp_name:
         mp_clean = mp_name.replace('"', '\\"')
@@ -125,6 +131,7 @@ def article_to_obsidian_markdown(
     publish_time: Any = None,
     tags: Optional[list[str]] = None,
     cover: str = "",
+    tag_intro: str = "",
     add_title_heading: bool = True,
 ) -> str:
     """将文章 HTML 内容转换为 Obsidian 兼容的 Markdown
@@ -141,6 +148,7 @@ def article_to_obsidian_markdown(
         publish_time: 发布时间（Unix 时间戳）
         tags: 额外标签列表
         cover: 封面图片 URL
+        tag_intro: 标签简介，用于描述文章所属分类
         add_title_heading: 是否在正文开头添加一级标题
 
     Returns:
@@ -162,6 +170,7 @@ def article_to_obsidian_markdown(
         publish_time=publish_time,
         tags=tags,
         cover=cover,
+        tag_intro=tag_intro,
     )
 
     parts = [frontmatter]

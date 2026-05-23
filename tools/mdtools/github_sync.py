@@ -221,6 +221,51 @@ def push_to_github(
         path_lock.release()
 
 
+def _get_tags_for_mp(mp_id: str) -> list[dict]:
+    """查询公众号/雪球号所属的标签信息列表
+
+    通过遍历 Tags 表，检查 mps_id JSON 字段中是否包含该 mp_id。
+
+    Args:
+        mp_id: 公众号或雪球号的 Feed ID
+
+    Returns:
+        标签信息字典列表（包含 name 和 intro），未找到时返回空列表
+    """
+    if not mp_id:
+        return []
+
+    try:
+        from core.db import DB
+        from core.models.tags import Tags
+        import json
+
+        session = DB.get_session()
+        try:
+            result = []
+            tags = session.query(Tags).filter(Tags.status == 1).all()
+            for tag in tags:
+                if not tag.mps_id:
+                    continue
+                try:
+                    mps_data = json.loads(tag.mps_id)
+                    if isinstance(mps_data, list):
+                        mps_ids = [str(mp.get("id", "")) for mp in mps_data]
+                        if mp_id in mps_ids:
+                            result.append({
+                                "name": tag.name,
+                                "intro": tag.intro or ""
+                            })
+                except (json.JSONDecodeError, TypeError):
+                    continue
+            return result
+        finally:
+            session.close()
+    except Exception as exc:
+        print_warning(f"[obsidian] => query tags for {mp_id} failed: {exc}")
+        return []
+
+
 def sync_article_to_obsidian(
     article: Any,
     mp_name: str = "",
@@ -253,11 +298,25 @@ def sync_article_to_obsidian(
     description = getattr(article, "description", "") or ""
     publish_time = getattr(article, "publish_time", None)
     pic_url = getattr(article, "pic_url", "") or ""
+    mp_id = getattr(article, "mp_id", "") or ""
 
     from tools.mdtools.obsidian import article_to_obsidian_markdown, build_obsidian_path
 
     tags = []
-    if mp_name:
+    tag_intro = ""
+
+    # 查询该公众号/雪球号所属的标签，将标签名称和简介加入 frontmatter
+    tag_infos = _get_tags_for_mp(mp_id)
+    for tag_info in tag_infos:
+        tag_name = tag_info.get("name", "")
+        if tag_name and tag_name not in tags:
+            tags.append(tag_name)
+        # 取第一个标签的简介作为 tag_intro
+        if not tag_intro:
+            tag_intro = tag_info.get("intro", "")
+
+    # 如果没有关联标签，则默认使用公众号/雪球号名称作为 tag
+    if not tags and mp_name:
         tags.append(mp_name)
 
     md_content = article_to_obsidian_markdown(
@@ -269,6 +328,7 @@ def sync_article_to_obsidian(
         publish_time=publish_time,
         tags=tags if tags else None,
         cover=pic_url,
+        tag_intro=tag_intro,
     )
 
     if not md_content:
