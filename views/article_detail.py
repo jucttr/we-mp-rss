@@ -95,12 +95,24 @@ async def article_detail_view(
         raw_content = article.content
         processed_content = process_content_images(raw_content)
         
+        # 根据 show_type 获取类型名称
+        show_type_map = {
+            0: "图文",
+            5: "视频",
+            7: "音频",
+            10: "贴图",
+            11: "分享"
+        }
+        show_type_name = show_type_map.get(article.show_type, f"其他({article.show_type})" if article.show_type is not None else "未设置")
+        
         article_data = {
             "id": article.id,
             "title": article.title,
             "description": article.description or Web.get_description(article.content),
             "pic_url": article.pic_url,
             "url": article.url,
+            "show_type": article.show_type,
+            "show_type_name": show_type_name,
             "publish_time": datetime.fromtimestamp(article.publish_time).strftime('%Y-%m-%d %H:%M') if article.publish_time else "",
             "created_at": article.created_at.strftime('%Y-%m-%d %H:%M') if article.created_at else "",
             "content": processed_content,

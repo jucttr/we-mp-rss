@@ -76,7 +76,7 @@ async def _run_refresh_article_task(task_id: str, article_id: str):
         fetcher = WXArticleFetcher()
         fetched = await fetcher.get_article_content(target_url)
         fetched_content = fetched.get("content")
-
+        article.show_type=fetched.get("article_type",article.show_type )
         if fetched_content != "DELETED" and not fetched_content:
             fetch_error = fetched.get("fetch_error") or "文章内容抓取为空"
             _set_refresh_task(task_id, {
@@ -167,6 +167,8 @@ async def clean_orphan_articles(
                 message="清理无效文章失败"
             )
         )
+    finally:
+        session.close()
 
 
 @router.delete("/clean-old", summary="清理指定天数前的旧文章")

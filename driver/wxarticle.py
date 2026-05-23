@@ -55,6 +55,7 @@ class WXArticleFetcher:
             - content: 正文HTML
             - mp_info: 公众号信息 {mp_name, logo, biz}
             - mp_id: 公众号ID
+            - article_type: 文章类型 (0=图文, 5=视频, 7=音频, 10=贴图)
             - fetch_error: 错误信息
         """
         info = {
@@ -71,6 +72,7 @@ class WXArticleFetcher:
                 "biz": ""
             },
             "mp_id": "",
+            "article_type": 0,  # 默认为图文类型
             "fetch_error": ""
         }
 
@@ -137,6 +139,10 @@ class WXArticleFetcher:
 
                 # 获取发布时间
                 publish_time = await self._extract_publish_time(page)
+
+                # 检测文章类型
+                article_type = await self._detect_article_type(page)
+                info["article_type"] = article_type
 
                 # 获取内容
                 content = await page.locator('#js_content').inner_html()
@@ -370,6 +376,65 @@ class WXArticleFetcher:
         except Exception as e:
             print_warning(f"提取发布时间失败: {str(e)}")
             return int(datetime.now().timestamp())
+            
+    async def _detect_article_type(self, page) -> int:
+        """
+        检测文章类型(异步)
+        
+        Returns:
+            文章类型: 0=图文, 5=视频, 7=音频, 10=贴图
+        """
+        try:
+        
+            # 尝试从页面内容中提取
+            content = await page.content()
+            
+           
+            
+            # 根据页面元素判断类型
+            # 检查是否有视频播放器
+            has_video = await page.evaluate('() => !!document.querySelector(".video_iframe, #js_video_page_title, [data-vid], mp-common-videosnap")')
+            if has_video:
+                return 5
+            
+            # 检查是否有音频播放器
+            has_audio = await page.evaluate('() => !!document.querySelector("#js_audio_title, .audio_area, mpvoice")')
+            if has_audio:
+                return 7
+            
+            # 检查是否为贴图类型（多图展示）
+            has_images = await page.evaluate('() => !!document.querySelector("#js_text_title")')
+            if has_images:
+                return 10
+            
+
+            # 尝试从页面JavaScript变量获取itemShowType
+            item_show_type = await page.evaluate('() => window.item_show_type')
+            if item_show_type is not None:
+                article_type = int(item_show_type)
+                # 验证是否为有效类型
+                if article_type in [0, 5, 7, 10]:
+                    return article_type
+
+             # 查找 itemShowType 的定义
+            patterns = [
+                r"var\s+itemShowType\s*=\s*window\.a_value_which_never_exists\s*\|\|\s*['\"](\d+)['\"]",
+                r"itemShowType\s*=\s*['\"](\d+)['\"]",
+                r"item_show_type\s*=\s*['\"](\d+)['\"]",
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, content)
+                if match:
+                    article_type = int(match.group(1))
+                    if article_type in [0, 5, 7, 10]:
+                        return article_type
+            # 默认为图文类型
+            return 0
+            
+        except Exception as e:
+            print_warning(f"检测文章类型失败: {str(e)}")
+            return 0
             
     def _convert_publish_time_to_timestamp(self, publish_time_str: str) -> int:
         """

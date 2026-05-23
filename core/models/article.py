@@ -20,12 +20,15 @@ class ArticleBase(Base):
     publish_type = Column(Integer,index=True)  # 发布类型
     publish_src = Column(Integer,index=True)  # 发布来源
     publish_status = Column(Text,index=True)  # 发布状态
+    art_type = Column(Integer,index=True)  # 内容类型(1=图文/视频/音频, 9=贴图等)
+    show_type = Column(Integer,index=True)  # 展示类型(0=图文, 5=视频, 7=音频, 10=贴图)
+    publish_info=Column(Text)  # 发布信息（JSON格式，包含文章的详细发布数据，如阅读数、点赞数等）
     # 状态与类型标识
     original_check_type = Column(Integer,index=True)  # 原创检测类型
     in_profile = Column(Integer,index=True)  # 是否在主页展示
     pre_publish_status = Column(Integer,index=True)  # 预发布状态
     service_type = Column(Integer,index=True)  # 服务类型
-    item_show_types = Column(Integer,index=True)  # 展示类型（对应 item_show_type，0通常为普通图文，10可能为特定的无图或特殊样式）
+    item_show_type = Column(Integer,index=True)  # 展示类型（对应 item_show_type，0通常为普通图文，10可能为特定的无图或特殊样式）
     copyright_stat = Column(Integer,index=True)  # 原创状态（0通常表示非原创，1表示原创）
     has_red_packet_cover = Column(Integer,index=True)  # 封面是否有红包挂件（0为无）
     # 系统字段
@@ -63,15 +66,17 @@ class Article(ArticleBase):
             'in_profile': self.in_profile,
             'pre_publish_status': self.pre_publish_status,
             'service_type': self.service_type,
-            'item_show_types': self.item_show_types,
+            'show_type': self.show_type,
+            'item_show_type': self.item_show_type,
             'copyright_stat': self.copyright_stat,
             'has_red_packet_cover': self.has_red_packet_cover,
+            'publish_info': self.publish_info,
             # 内容
             'content': self.content,
             'content_html': self.content_html,
             # 系统字段
-            'created_at': self.created_at.isoformat() if self.created_at and hasattr(self.created_at, "isoformat") else self.created_at,
-            'updated_at': self.updated_at.isoformat() if self.updated_at and hasattr(self.updated_at, "isoformat") else self.updated_at,
+            'created_at': self.created_at.isoformat() if self.created_at and hasattr(self.created_at, "isoformat") else self.created_at, #type: ignore
+            'updated_at': self.updated_at.isoformat() if self.updated_at and hasattr(self.updated_at, "isoformat") else self.updated_at, #type: ignore
             'updated_at_millis': self.updated_at_millis,
             'is_export': self.is_export,
             'is_read': self.is_read,
