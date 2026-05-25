@@ -334,10 +334,28 @@ def sync_article_to_obsidian(
     if not md_content:
         return False
 
+    # 根据 Feed 的 source_type 判断平台类型
+    source_type = "wechat"
+    if mp_id:
+        try:
+            from core.db import DB
+            from core.models.feed import Feed
+
+            session = DB.get_session()
+            try:
+                feed = session.query(Feed).filter(Feed.id == mp_id).first()
+                if feed:
+                    source_type = getattr(feed, "source_type", "") or "wechat"
+            finally:
+                session.close()
+        except Exception:
+            pass
+
     file_path = build_obsidian_path(
         title=title,
         mp_name=mp_name,
         publish_time=publish_time,
+        source_type=source_type,
     )
 
     return push_to_github(

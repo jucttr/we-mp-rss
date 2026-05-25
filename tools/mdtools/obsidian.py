@@ -187,16 +187,20 @@ def build_obsidian_path(
     title: str,
     mp_name: str = "",
     publish_time: Any = None,
+    source_type: str = "wechat",
 ) -> str:
     """构建 Obsidian 仓库中的文件路径
 
-    路径结构：公众号名/年-月/日_标题.md
-    例如：极客公园/2026-05/01_AI又进化了.md
+    路径结构：<平台>/公众号名/年-月/日_标题.md
+    例如：
+      微信/极客公园/2026-05/01_AI又进化了.md
+      雪球/雪球号/2026-05/01_xxx.md
 
     Args:
         title: 文章标题，会被清理为安全文件名
-        mp_name: 公众号名称，作为顶层目录
+        mp_name: 公众号或雪球号名称，作为二级目录
         publish_time: 发布时间（Unix 时间戳），用于生成年月子目录和文件名日期前缀
+        source_type: 来源类型，wechat 或 xueqiu，决定顶层目录前缀
 
     Returns:
         相对文件路径字符串
@@ -218,8 +222,10 @@ def build_obsidian_path(
 
     filename = f"{day_prefix}_{safe_title}.md"
 
+    platform_prefix = "雪球" if source_type == "xueqiu" else "微信"
+
     if mp_name:
         safe_mp = _sanitize_filename(mp_name)
-        return f"{safe_mp}/{date_prefix}/{filename}"
+        return f"{platform_prefix}/{safe_mp}/{date_prefix}/{filename}"
 
-    return f"{date_prefix}/{filename}"
+    return f"{platform_prefix}/{date_prefix}/{filename}"
