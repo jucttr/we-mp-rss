@@ -68,11 +68,16 @@ services:
     restart: unless-stopped
     environment:
       WATCHTOWER_CLEANUP: "true"
-      WATCHTOWER_POLL_INTERVAL: "60"
+      WATCHTOWER_POLL_INTERVAL: "90"
       WATCHTOWER_LABEL_ENABLE: "true"
-      WATCHTOWER_TIMEOUT: "30s"
+      WATCHTOWER_TIMEOUT: "60s"
+      HTTP_PROXY: http://singbox:7890
+      HTTPS_PROXY: http://singbox:7890
+      NO_PROXY: localhost,127.0.0.1,db-mp,redis
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - singbox
 
 volumes:
   db_data:
