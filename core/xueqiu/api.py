@@ -1,5 +1,7 @@
 import time
 import random
+import re
+import json
 import requests
 from typing import Optional, Dict, Any
 from core.print import print_error, print_info, print_warning
@@ -310,3 +312,113 @@ class XueqiuApi:
             if page < max_page:
                 time.sleep(self.batch_delay + random.uniform(0.5, 1.5))
         return all_articles
+
+    @staticmethod
+    def _extract_snoman_status(html: str) -> Optional[Dict]:
+        """从 HTML 中提取 window.SNOWMAN_STATUS JSON 数据
+
+        雪球文章详情页会将完整文章数据内嵌在 <script> 标签中的 window.SNOWMAN_STATUS 变量里。
+        """
+        if not html:
+            return None
+
+        pattern = r'window\.SNOWMAN_STATUS\s*=\s*(\{.*?\});\s*</script>'
+        match = re.search(pattern, html, re.DOTALL)
+        if not match:
+            pattern2 = r'window\.SNOWMAN_STATUS\s*=\s*(\{.*?\});'
+            match = re.search(pattern2, html, re.DOTALL)
+
+        if not match:
+            return None
+
+        json_str = match.group(1)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            return None
+
+    @staticmethod
+    def _extract_content_from_html(html: str) -> Optional[str]:
+        """从 HTML 中提取正文内容
+
+        优先从 window.SNOWMAN_STATUS 中获取 text 字段，
+        如果失败则尝试解析 .article__bd__detail 的 DOM。
+        """
+        status = XueqiuApi._extract_snoman_status(html)
+        if status:
+            text = status.get("text", "")
+            if text:
+                return text.strip()
+
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "html.parser")
+            detail = soup.select_one(".article__bd__detail")
+            if detail:
+                return str(detail)
+        except Exception:
+            pass
+
+        return None
+
+    def _request_article_page(self, url: str) -> Optional[str]:
+        """获取雪球文章详情页 HTML 内容
+
+        复用现有的 _request() 方法（HTTP + 浏览器降级），
+        返回页面 HTML 字符串而非 JSON。
+        """
+        # _request() 返回的可能是 dict（JSON 响应）或包含 HTML 的 dict
+        result = self._request(url)
+        if not result:
+            return None
+
+        if isinstance(result, dict):
+            # 如果 _request 通过浏览器返回了 JSON 格式的页面数据
+            if "error" in result:
+                return None
+            # 尝试提取 text 字段（某些 API 直接返回文章数据）
+            text = result.get("text", "")
+            if text:
+                return text.strip()
+            # 可能是包装了 raw HTML
+            raw = result.get("raw", "")
+            if raw and isinstance(raw, str):
+                return raw
+            return None
+
+        if isinstance(result, str):
+            return result
+
+        return None
+
+    def get_article_content(self, url: str) -> Dict[str, Any]:
+        """获取雪球文章详情页完整内容（统一入口）
+
+        先通过 _request() 获取页面（HTTP + 浏览器降级），
+        然后从 HTML 中提取 window.SNOWMAN_STATUS 的 text 字段作为正文。
+
+        Returns:
+            {
+                "content": 正文 HTML 字符串,
+                "title": 标题,
+                "fetch_error": 错误信息（如有）,
+            }
+        """
+        info = {
+            "content": "",
+            "title": "",
+            "fetch_error": "",
+        }
+
+        html = self._request_article_page(url)
+        if not html:
+            info["fetch_error"] = "无法获取雪球文章详情页"
+            return info
+
+        content = self._extract_content_from_html(html)
+        if content:
+            info["content"] = content
+            return info
+
+        info["fetch_error"] = "无法从详情页提取正文内容"
+        return info

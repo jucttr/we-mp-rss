@@ -77,8 +77,31 @@ def _fetch_with_api(url: str) -> Tuple[str, Any]:
     return (fetcher.content_extract(url) or "").strip(),{}
 
 
+def _fetch_xueqiu(url: str) -> Tuple[str, Any]:
+    from core.xueqiu.api import XueqiuApi
+
+    fetcher = XueqiuApi()
+    result = fetcher.get_article_content(url) or {}
+    return (result.get("content") or "").strip(),result
+
+
+def _is_xueqiu_url(url: str) -> bool:
+    return "xueqiu.com" in (url or "")
+
+
 def fetch_article_content(url: str, preferred_mode: str | None = None) -> Tuple[str, str,str]:
     mode = normalize_content_mode(preferred_mode)
+
+    # 雪球平台文章走专属抓取逻辑
+    if _is_xueqiu_url(url):
+        content, result = _fetch_xueqiu(url)
+        article_type = result.get("article_type", "")
+        if content == "DELETED":
+            return content, "xueqiu", article_type
+        if content:
+            return content, "xueqiu", article_type
+        return "", "xueqiu", article_type
+
     modes = [mode] + [item for item in ("web", "api") if item != mode]
 
     for current_mode in modes:
@@ -137,7 +160,6 @@ def sync_article_content(
             print_info(f"article {article.id} marked as deleted via {mode}")
             return True, mode
 
-        from driver.wxarticle import Web
         from tools.fix import fix_html
 
         article.content = content
@@ -146,7 +168,10 @@ def sync_article_content(
         article.status = DATA_STATUS.ACTIVE
         article.has_content = 1
         if not (getattr(article, "description", "") or "").strip():
-            article.description = Web.get_description(content)
+            # 雪球文章在列表页已有 description，微信文章需要提取
+            if not _is_xueqiu_url(article_url):
+                from driver.wxarticle import Web
+                article.description = Web.get_description(content)
         # 修正成功,重置失败计数
         if hasattr(article, 'fix_fail_count'):
             article.fix_fail_count = 0

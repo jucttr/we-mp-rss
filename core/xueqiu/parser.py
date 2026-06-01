@@ -82,9 +82,18 @@ class XueqiuParser:
             user_info = s.get("user", {})
             title = s.get("title", "")
             text = s.get("text", "")
-            if not title and text:
-                clean = re.sub(r'<[^>]+>', '', text).strip()
+            description = s.get("description", "")
+            status_type = s.get("type", "0")
+
+            # type=1（长文）和 type=3（专栏）在列表 API 中 text 为空，需要后续补抓详情页
+            needs_content_fetch = status_type in ("1", "3")
+
+            # 生成标题：优先使用 title 字段，否则从 text/description 提取
+            content_text = text or description
+            if not title and content_text:
+                clean = re.sub(r'<[^>]+>', '', content_text).strip()
                 title = clean[:50] + ("..." if len(clean) > 50 else "")
+
             created_at = s.get("created_at", 0)
             if created_at > 1e12:
                 publish_time = int(created_at / 1000)
@@ -98,7 +107,7 @@ class XueqiuParser:
                 "reply_count": s.get("reply_count", 0),
                 "like_count": s.get("like_count", 0),
                 "fav_count": s.get("fav_count", 0),
-                "status_type": s.get("type", "0"),
+                "status_type": status_type,
                 "target": target,
                 "stock_correlation": s.get("stockCorrelation", []),
                 "source_device": s.get("source", ""),
@@ -110,19 +119,40 @@ class XueqiuParser:
             status_id = s.get("id")
             if not status_id:
                 continue
+
+            # 生成 description：优先使用 description 字段，否则从 text 提取纯文本前200字
+            desc = description or (re.sub(r'<[^>]+>', '', text)[:200] if text else "")
+
+            # 生成 content 和 content_html：
+            # - 如果 text 有值（type=0 短动态），直接使用
+            # - 如果 text 为空（type=1/3 长文/专栏），先用 description 填充，标记 has_content=0 等待补抓
+            if text:
+                content = text
+                content_html = text
+                has_content = 1
+            elif description:
+                content = description
+                content_html = description
+                has_content = 0 if needs_content_fetch else 1
+            else:
+                content = ""
+                content_html = ""
+                has_content = 0 if needs_content_fetch else 1
+
             parsed.append({
                 "id": f"xq_{status_id}",
                 "mp_id": mp_id,
                 "title": title,
                 "url": target,
                 "pic_url": s.get("pic", ""),
-                "description": s.get("description", "") or re.sub(r'<[^>]+>', '', text)[:200],
-                "content": text,
-                "content_html": text,
+                "description": desc,
+                "content": content,
+                "content_html": content_html,
                 "publish_time": publish_time,
                 "create_time": publish_time,
                 "updated_at": publish_time,
                 "status": 1,
+                "has_content": has_content,
                 "extinfo": json.dumps(extinfo, ensure_ascii=False),
             })
         return parsed
