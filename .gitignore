@@ -29,6 +29,7 @@ test.yaml
 test.py
 .codeartsdoer
 .env
+tencent-ssh.sh
  
 #  一些AI相关的文件夹和文件
 .claude
