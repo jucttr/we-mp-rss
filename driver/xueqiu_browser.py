@@ -67,6 +67,12 @@ class XueqiuBrowserManager:
         fetch_via_browser 调用都在此循环中执行。
         """
         if self._event_loop is None or not self._event_loop.is_running():
+            # 旧 loop 已停止，清理后重新创建，避免 is_ready 判断通过但 loop 不运行
+            if self._event_loop is not None:
+                try:
+                    self._event_loop.close()
+                except Exception:
+                    pass
             self._start_background_loop()
 
         future = asyncio.run_coroutine_threadsafe(self.start(), self._event_loop)
@@ -668,7 +674,12 @@ class XueqiuBrowserManager:
     @property
     def is_ready(self) -> bool:
         """浏览器是否已启动且连接正常"""
-        return self._browser is not None and self._browser.is_connected()
+        return (
+            self._event_loop is not None
+            and self._event_loop.is_running()
+            and self._browser is not None
+            and self._browser.is_connected()
+        )
 
     def refresh_cookies_sync(self) -> Optional[str]:
         """同步方式刷新雪球Cookie
